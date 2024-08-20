@@ -83,7 +83,8 @@ async def get_plants(current_user: dict = Security(get_current_user)):
                     "name": 1,
                     "type": 1,
                     "location": 1,
-                    "description": 1
+                    "description": 1,
+                    "imageUrl": 1
                 }
             }
         ]
@@ -266,12 +267,6 @@ async def upload_plant_image(request_body: dict, file: UploadFile = File(...), c
         image_url = blob.public_url
         
         # Store imageURL in MongoDB for the specified plant
-        update_response = await db["plants"].update_one(
-            {"_id": plant_id},
-            {"$set" : {"imageUrl": image_url}}
-        )
-        
-        # Update the plant with the provided data
         update_response = await db["plants"].update_one({"_id": plant_id}, {"$set" : {"imageUrl": image_url}})
                                                         
         update_details = {
