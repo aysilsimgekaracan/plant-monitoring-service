@@ -2,7 +2,8 @@ import os
 import firebase_admin
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from firebase_admin import credentials, initialize_app
+import json
+
 from authentication import router as authentication_router
 from plant_monitoring import router as plant_monitoring_router
 
@@ -10,9 +11,10 @@ load_dotenv()
 
 # Initialize Firebase
 def initialize_firebase():
+    service_account = json.loads(os.getenv("FIREBASE_SERVICE_ACCOUNT"))
     if not firebase_admin._apps:  # Check if Firebase is already initialized
-        cred = credentials.Certificate("Secrets/serviceAccountKey.json")
-        initialize_app(cred, {
+        cred = firebase_admin.credentials.Certificate(service_account)
+        firebase_admin.initialize_app(cred, {
             "storageBucket": os.getenv("FIREBASE_BUCKET_NAME")
         })
 
