@@ -131,7 +131,8 @@ async def get_plant(request_body: dict, current_user: dict = Security(get_curren
                     "name": 1,
                     "type": 1,
                     "location": 1,
-                    "description": 1
+                    "description": 1,
+                    "imageUrl": 1
                 }
             }
         ]
