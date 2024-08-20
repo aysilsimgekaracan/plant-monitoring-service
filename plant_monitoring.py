@@ -1,6 +1,6 @@
 from typing import Annotated, Union
 from firebase_admin import storage
-from fastapi import HTTPException, status, APIRouter, Security, UploadFile, File
+from fastapi import HTTPException, status, APIRouter, Security, UploadFile, File, Form
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
@@ -245,7 +245,7 @@ async def create_plant(plant: CreatePlant, current_user: dict = Security(get_cur
 
 # POST endpoint to upload image
 @router.post("/UploadPlantImage/", tags=["Plant Monitoring"])
-async def upload_plant_image(plant_id: str, file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
+async def upload_plant_image( plant_id: str = Form(...), file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
     bucket = storage.bucket()
     roles = current_user.get("role", [])
 
