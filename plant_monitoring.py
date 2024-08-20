@@ -1,6 +1,6 @@
 from typing import Annotated, Union
-
-from fastapi import HTTPException, status, APIRouter, Security
+from firebase_admin import storage
+from fastapi import HTTPException, status, APIRouter, Security, UploadFile, File, Form
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 import motor.motor_asyncio
 from bson import ObjectId
 from typing import List
-from dotenv import load_dotenv
 from datetime import datetime
+from uuid import uuid4
 
 from authentication import get_current_user
 
@@ -23,7 +23,9 @@ MONGODB_URL = os.getenv("MONGODB_URL")
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
 db = client.plant_monitoring
 
-# CLASSES
+########################################################################
+# MARK: MODELS
+########################################################################
 
 class Plant(BaseModel):
     id: str
@@ -31,6 +33,7 @@ class Plant(BaseModel):
     type: str
     location: str
     description: str
+    imageUrl: str
 
 
 class CreatePlant(BaseModel):
@@ -58,7 +61,9 @@ class CreateSensorOutput(BaseModel):
     light_level: float
     humidity: float
 
-# MARK: START OF ENDPOINTS FOR PLANT MONITORING
+########################################################################
+# MARK: PLANT
+########################################################################
 
 # GET endpoint to retrieve all plants
 @router.get("/GetPlants/", response_description="List all plants", response_model=List[Plant], tags=["Plant Monitoring"])
@@ -78,7 +83,8 @@ async def get_plants(current_user: dict = Security(get_current_user)):
                     "name": 1,
                     "type": 1,
                     "location": 1,
-                    "description": 1
+                    "description": 1,
+                    "imageUrl": 1
                 }
             }
         ]
@@ -126,7 +132,8 @@ async def get_plant(request_body: dict, current_user: dict = Security(get_curren
                     "name": 1,
                     "type": 1,
                     "location": 1,
-                    "description": 1
+                    "description": 1,
+                    "imageUrl": 1
                 }
             }
         ]
@@ -236,11 +243,47 @@ async def create_plant(plant: CreatePlant, current_user: dict = Security(get_cur
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# END OF ENDPOINTS AND CLASSES FOR PLANT
+# POST endpoint to upload image
+@router.post("/UploadPlantImage/", tags=["Plant Monitoring"])
+async def upload_plant_image( plant_id: str = Form(...), file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
+    bucket = storage.bucket()
+    roles = current_user.get("role", [])
 
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to send request to this endpoint.")
+    try:
+        plant_object_id = ObjectId(plant_id)
+        
+        existing_plant = await db["plants"].find_one({"_id": plant_object_id})
+        
+        if existing_plant is None:
+            return Response(content="Plant not found", status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Generate unique name and store on firebase
+        blob = bucket.blob(f"plants/{uuid4()}.jpg")
+        blob.upload_from_file(file.file)
+        blob.make_public()
+        image_url = blob.public_url
 
-# START OF ENDPOINTS AND CLASSES FOR SENSOR OUTPUT
+        # Store imageURL in MongoDB for the specified plant
+        update_response = await db["plants"].update_one({"_id": plant_object_id}, {"$set" : {"imageUrl": image_url}})
+                                                        
+        update_details = {
+            "plant_id": plant_id,
+            "matchedCount": update_response.matched_count,
+            "modifiedCount": update_response.modified_count,
+            "upsertedId": str(update_response.upserted_id),
+            "acknowledged": update_response.acknowledged,
+            "imageUrl": image_url
+        }
 
+        return JSONResponse(status_code=status.HTTP_200_OK, content=update_details)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload an image: {str(e)}")
+
+########################################################################
+# MARK: SENSOR OUTPUT
+########################################################################
 
 # GET endpoint to retrieve all sensor outputs by a given plant ID
 

@@ -17,6 +17,10 @@ MONGODB_URL = os.getenv("MONGODB_URL")
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
 db = client.askdb
 
+########################################################################
+# MARK: MODELS
+########################################################################
+
 class UserCredentials(BaseModel):
     username: str
     password: str
@@ -24,8 +28,11 @@ class UserCredentials(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    
+########################################################################
+# MARK: AUTH
+########################################################################
 
-# START OF ENDPOINTS FOR AUTH
 SECRET_KEY = "your-secret-key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours

@@ -187,3 +187,7 @@ cython_debug/
 
 # Helper functions
 helpers
+
+# Secrets
+Secrets
+Secrets/*
