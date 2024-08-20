@@ -9,7 +9,7 @@ from plant_monitoring import router as plant_monitoring_router
 
 load_dotenv()
 
-# Initialize Firebase
+# MARK: Firebase
 def initialize_firebase():
     service_account = json.loads(os.getenv("FIREBASE_SERVICE_ACCOUNT"))
     if not firebase_admin._apps:  # Check if Firebase is already initialized
@@ -20,11 +20,11 @@ def initialize_firebase():
 
 initialize_firebase()
 
-# Initialize FastAPI app
+# MARK: Initialize FastAPI app
 app = FastAPI(
     title="Plant Monitoring System",
     description="API for plant monitoring app",
-    version="1.0.0",
+    version="1.0.1",
     openapi_tags=[
         {"name": "Authentication", "description": "Endpoints related to user authentication"},
         {"name": "Plant Monitoring", "description": "Endpoints related to Plant Monitoring"}
