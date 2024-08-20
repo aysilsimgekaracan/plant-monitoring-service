@@ -33,6 +33,7 @@ class Plant(BaseModel):
     type: str
     location: str
     description: str
+    imageUrl: str
 
 
 class CreatePlant(BaseModel):
@@ -242,12 +243,21 @@ async def create_plant(plant: CreatePlant, current_user: dict = Security(get_cur
 
 # POST endpoint to upload image
 @router.post("/UploadPlantImage/", tags=["Plant Monitoring"])
-async def upload_plant_image(plant_id: str, file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
+async def upload_plant_image(request_body: dict, file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
     bucket = storage.bucket()
     roles = current_user.get("role", [])
+
     if "plant_monitoring" not in roles and "admin" not in roles:
         raise HTTPException(status_code=401, detail="You do not have access to send request to this endpoint.")
     try:
+        plant_id = request_body.id
+        plant_object_id = ObjectId(plant_id)
+        
+        existing_plant = await db["plants"].find_one({"_id": plant_object_id})
+        
+        if existing_plant is None:
+            return Response(content="Plant not found", status_code=status.HTTP_403_FORBIDDEN)
+        
         # Generate unique name and store on firebase
         blob = bucket.blob(f"plants/{uuid4()}.jpg")
         blob.upload_from_file(file.file)
@@ -255,13 +265,24 @@ async def upload_plant_image(plant_id: str, file: UploadFile = File(...), curren
         image_url = blob.public_url
         
         # Store imageURL in MongoDB for the specified plant
-        await db["plants"].update_one(
-            {"_id": ObjectId(plant_id)},
+        update_response = await db["plants"].update_one(
+            {"_id": plant_id},
             {"$set" : {"imageUrl": image_url}}
         )
         
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Image uploaded successfully", "image_url": image_url})
+        # Update the plant with the provided data
+        update_response = await db["plants"].update_one({"_id": plant_id}, {"$set" : {"imageUrl": image_url}})
+                                                        
+        update_details = {
+            "plant_id": plant_id,
+            "matchedCount": update_response.matched_count,
+            "modifiedCount": update_response.modified_count,
+            "upsertedId": str(update_response.upserted_id),
+            "acknowledged": update_response.acknowledged,
+            "imageUrl": image_url
+        }
 
+        return JSONResponse(status_code=status.HTTP_200_OK, content=update_details)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload an image: {str(e)}")
 
