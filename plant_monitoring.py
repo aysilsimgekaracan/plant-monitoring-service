@@ -245,14 +245,13 @@ async def create_plant(plant: CreatePlant, current_user: dict = Security(get_cur
 
 # POST endpoint to upload image
 @router.post("/UploadPlantImage/", tags=["Plant Monitoring"])
-async def upload_plant_image(request_body: dict, file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
+async def upload_plant_image(plant_id: str, file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
     bucket = storage.bucket()
     roles = current_user.get("role", [])
 
     if "plant_monitoring" not in roles and "admin" not in roles:
         raise HTTPException(status_code=401, detail="You do not have access to send request to this endpoint.")
     try:
-        plant_id = request_body.id
         plant_object_id = ObjectId(plant_id)
         
         existing_plant = await db["plants"].find_one({"_id": plant_object_id})
@@ -265,7 +264,7 @@ async def upload_plant_image(request_body: dict, file: UploadFile = File(...), c
         blob.upload_from_file(file.file)
         blob.make_public()
         image_url = blob.public_url
-        
+
         # Store imageURL in MongoDB for the specified plant
         update_response = await db["plants"].update_one({"_id": plant_id}, {"$set" : {"imageUrl": image_url}})
                                                         
