@@ -266,7 +266,7 @@ async def upload_plant_image( plant_id: str = Form(...), file: UploadFile = File
         image_url = blob.public_url
 
         # Store imageURL in MongoDB for the specified plant
-        update_response = await db["plants"].update_one({"_id": plant_id}, {"$set" : {"imageUrl": image_url}})
+        update_response = await db["plants"].update_one({"_id": plant_object_id}, {"$set" : {"imageUrl": image_url}})
                                                         
         update_details = {
             "plant_id": plant_id,
