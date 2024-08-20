@@ -1,6 +1,6 @@
 from typing import Annotated, Union
-
-from fastapi import HTTPException, status, APIRouter, Security
+from firebase_admin import storage
+from fastapi import HTTPException, status, APIRouter, Security, UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 import motor.motor_asyncio
 from bson import ObjectId
 from typing import List
-from dotenv import load_dotenv
 from datetime import datetime
+from uuid import uuid4
 
 from authentication import get_current_user
 
@@ -18,12 +18,14 @@ load_dotenv()
 
 router = APIRouter()
 
-MONGODB_URL = os.getenv("MONGODB_URL")
+MONGODB_URL = os.getenv("MONGODB_URL_DEBUG")
 
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
 db = client.plant_monitoring
 
-# CLASSES
+########################################################################
+# MARK: MODELS
+########################################################################
 
 class Plant(BaseModel):
     id: str
@@ -58,7 +60,9 @@ class CreateSensorOutput(BaseModel):
     light_level: float
     humidity: float
 
-# MARK: START OF ENDPOINTS FOR PLANT MONITORING
+########################################################################
+# MARK: PLANT
+########################################################################
 
 # GET endpoint to retrieve all plants
 @router.get("/GetPlants/", response_description="List all plants", response_model=List[Plant], tags=["Plant Monitoring"])
@@ -236,11 +240,34 @@ async def create_plant(plant: CreatePlant, current_user: dict = Security(get_cur
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# END OF ENDPOINTS AND CLASSES FOR PLANT
+# POST endpoint to upload image
+@router.post("/UploadPlantImage/", tags=["Plant Monitoring"])
+async def upload_plant_image(plant_id: str, file: UploadFile = File(...), current_user: dict = Security(get_current_user)):
+    bucket = storage.bucket()
+    roles = current_user.get("role", [])
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to send request to this endpoint.")
+    try:
+        # Generate unique name and store on firebase
+        blob = bucket.blob(f"plants/{uuid4()}.jpg")
+        blob.upload_from_file(file.file)
+        blob.make_public()
+        image_url = blob.public_url
+        
+        # Store imageURL in MongoDB for the specified plant
+        await db["plants"].update_one(
+            {"_id": ObjectId(plant_id)},
+            {"$set" : {"imageUrl": image_url}}
+        )
+        
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Image uploaded successfully", "image_url": image_url})
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload an image: {str(e)}")
 
-# START OF ENDPOINTS AND CLASSES FOR SENSOR OUTPUT
-
+########################################################################
+# MARK: SENSOR OUTPUT
+########################################################################
 
 # GET endpoint to retrieve all sensor outputs by a given plant ID
 
