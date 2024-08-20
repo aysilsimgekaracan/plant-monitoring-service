@@ -18,7 +18,7 @@ load_dotenv()
 
 router = APIRouter()
 
-MONGODB_URL = os.getenv("MONGODB_URL_DEBUG")
+MONGODB_URL = os.getenv("MONGODB_URL")
 
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
 db = client.plant_monitoring
