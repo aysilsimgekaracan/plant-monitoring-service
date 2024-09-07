@@ -481,11 +481,12 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        # Convert empty string for plant_id to None for MongoDB
         plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
-
-        # Use the provided _id from the request body
-        device_object_id = ObjectId(request_body._id)
+        
+        try:
+            device_object_id = ObjectId(request_body._id)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Invalid ObjectId format")
 
         new_device = {
             "_id": device_object_id,
@@ -493,14 +494,12 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
             "plant_id": plant_id_for_db
         }
 
-        # Insert the new device into the database
         result = await db["devices"].insert_one(new_device)
 
-        # Return the created device data
         return {
             "_id": str(device_object_id),
             "device_name": request_body.device_name,
-            "plant_id": request_body.plant_id  # Return the original empty string in the response
+            "plant_id": request_body.plant_id
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
