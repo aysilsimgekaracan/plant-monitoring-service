@@ -389,9 +389,13 @@ async def create_sensor_output(sensor_output: CreateSensorOutput, current_user: 
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"_id": str(new_sensor_output.inserted_id)})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+########################################################################
+# MARK: DEVICES
+########################################################################
 
 # GET endpoint to list all devices
-@router.get("/GetDevices/", response_description="List all devices", response_model=List[Device], tags=["Devices"])
+@router.get("/GetDevices/", response_description="List all devices", tags=["Devices"])
 async def get_devices(current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
@@ -399,53 +403,40 @@ async def get_devices(current_user: dict = Security(get_current_user)):
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
+        # Retrieve all devices from the collection
         devices_cursor = db["devices"].find({})
         devices = await devices_cursor.to_list(length=None)
-        
+
+        # Convert ObjectId to string for _id field
         for device in devices:
             device["_id"] = str(device["_id"])
-            if device["plant_id"] is not None:
-                device["plant_id"] = str(device["plant_id"])
-        
+
         return devices
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# POST endpoint to create a new device
-@router.post("/CreateDevice/", response_description="Create a new device", response_model=CreateDeviceResponse, tags=["Devices"])
-async def create_device(request_body: CreateDevice, current_user: dict = Security(get_current_user)):
+@router.get("/GetAvailableDevices/", response_description="List available devices (without a plant)", tags=["Devices"])
+async def available_devices(current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
     if "plant_monitoring" not in roles and "admin" not in roles:
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        # Convert empty string for plant_id to None for MongoDB
-        plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
-        
-        device_object_id = ObjectId(request_body._id)
+        # Retrieve devices with plant_id as null (None in Python)
+        available_devices_cursor = db["devices"].find({"plant_id": None})
+        available_devices = await available_devices_cursor.to_list(length=None)
 
-        new_device = {
-            "_id": device_object_id,
-            "deviceName": request_body.deviceName,
-            "plant_id": plant_id_for_db  # Store as None if it was an empty string
-        }
+        # Convert ObjectId to string for _id field
+        for device in available_devices:
+            device["_id"] = str(device["_id"])
 
-        # Insert the new device into the database
-        result = await db["devices"].insert_one(new_device)
-
-        return {
-            "_id": str(device_object_id),
-            "deviceName": request_body.deviceName,
-            "plant_id": request_body.plant_id
-        }
+        return available_devices
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # GET endpoint to get a specific device by ID
-@router.post("/GetDevice", response_description="Get a device by device ID or plant ID", tags=["Devices"])
+@router.get("/GetDevice", response_description="Get a device by device ID or plant ID", tags=["Devices"])
 async def get_device(request_body: DeviceQuery, current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
@@ -478,6 +469,38 @@ async def get_device(request_body: DeviceQuery, current_user: dict = Security(ge
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# POST endpoint to create a new device
+@router.post("/CreateDevice/", response_description="Create a new device", response_model=CreateDeviceResponse, tags=["Devices"])
+async def create_device(request_body: CreateDevice, current_user: dict = Security(get_current_user)):
+    roles = current_user.get("role", [])
+    
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
+    
+    try:
+        # Convert empty string for plant_id to None for MongoDB
+        plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
+
+        # Use the provided _id from the request body
+        device_object_id = ObjectId(request_body._id)
+
+        new_device = {
+            "_id": device_object_id,
+            "device_name": request_body.device_name,  # Make sure the field matches the request
+            "plant_id": plant_id_for_db  # Store as None if it was an empty string
+        }
+
+        # Insert the new device into the database
+        result = await db["devices"].insert_one(new_device)
+
+        # Return the created device data with the original empty string in the response
+        return {
+            "_id": str(device_object_id),
+            "device_name": request_body.device_name,
+            "plant_id": request_body.plant_id  # Return the original empty string
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # PUT endpoint to update a device
 @router.put("/UpdateDevice/", response_description="Update a device by ID", tags=["Devices"])
@@ -495,8 +518,8 @@ async def update_device(request_body: UpdateDevice, current_user: dict = Securit
         if request_body.plant_id is not None:
             update_data["plant_id"] = request_body.plant_id  # Can be None or valid ID
         
-        if request_body.deviceName is not None:
-            update_data["deviceName"] = request_body.deviceName
+        if request_body.device_name is not None:
+            update_data["device_name"] = request_body.device_name
 
         if not update_data:
             return HTTPException(status_code=400, detail="No fields provided to update")
