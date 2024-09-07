@@ -66,13 +66,19 @@ class Device(BaseModel):
     device_name: str
 
 class CreateDevice(BaseModel):
+    _id: str
+    deviceName: str
+    plant_id: str
+    
+class CreateDeviceResponse(BaseModel):
+    _id: str
+    deviceName: str
     plant_id: str | None = None
-    device_name: str
     
 class UpdateDevice(BaseModel):
     device_id: str
     plant_id: str | None = None
-    deviceName: str | None = None
+    device_name: str | None = None
 
 class DeviceQuery(BaseModel):
     device_id: str | None = None
@@ -407,17 +413,33 @@ async def get_devices(current_user: dict = Security(get_current_user)):
 
 
 # POST endpoint to create a new device
-@router.post("/CreateDevice/", response_description="Create a new device", response_model=CreateDevice, tags=["Devices"])
-async def create_device(device: CreateDevice, current_user: dict = Security(get_current_user)):
+@router.post("/CreateDevice/", response_description="Create a new device", response_model=CreateDeviceResponse, tags=["Devices"])
+async def create_device(request_body: CreateDevice, current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
     if "plant_monitoring" not in roles and "admin" not in roles:
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        device_data = device.dict()
-        new_device = await db["devices"].insert_one(device_data)
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"_id": str(new_device.inserted_id)})
+        # Convert empty string for plant_id to None for MongoDB
+        plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
+        
+        device_object_id = ObjectId(request_body._id)
+
+        new_device = {
+            "_id": device_object_id,
+            "deviceName": request_body.deviceName,
+            "plant_id": plant_id_for_db  # Store as None if it was an empty string
+        }
+
+        # Insert the new device into the database
+        result = await db["devices"].insert_one(new_device)
+
+        return {
+            "_id": str(device_object_id),
+            "deviceName": request_body.deviceName,
+            "plant_id": request_body.plant_id
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
