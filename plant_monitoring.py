@@ -391,9 +391,11 @@ async def get_devices(current_user: dict = Security(get_current_user)):
         devices_cursor = db["devices"].find({})
         devices = await devices_cursor.to_list(length=None)
         
-        # Convert ObjectId to string for proper JSON response
+        # Convert ObjectId to string for plant_id and _id
         for device in devices:
             device["_id"] = str(device["_id"])
+            if device["plant_id"]:
+                device["plant_id"] = str(device["plant_id"])
         
         return devices
     except Exception as e:
