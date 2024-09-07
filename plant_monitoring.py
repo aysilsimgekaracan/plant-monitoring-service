@@ -407,10 +407,12 @@ async def get_devices(current_user: dict = Security(get_current_user)):
         devices_cursor = db["devices"].find({})
         devices = await devices_cursor.to_list(length=None)
 
-        # Convert ObjectId to string for _id field
+        # Convert ObjectId to string for _id and plant_id fields
         for device in devices:
             if "_id" in device:
                 device["_id"] = str(device["_id"])  # Convert ObjectId to string
+            if "plant_id" in device and device["plant_id"]:
+                device["plant_id"] = str(device["plant_id"])  # Convert plant_id ObjectId to string if it exists
 
         return devices
     except Exception as e:
@@ -471,7 +473,6 @@ async def get_device(request_body: DeviceQuery, current_user: dict = Security(ge
         raise HTTPException(status_code=500, detail=str(e))
 
 # POST endpoint to create a new device
-
 @router.post("/CreateDevice/", response_description="Create a new device", tags=["Devices"])
 async def create_device(request_body: CreateDevice, current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
@@ -480,8 +481,10 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
+        # Convert empty string for plant_id to None for MongoDB
         plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
 
+        # Use the provided _id from the request body
         device_object_id = ObjectId(request_body._id)
 
         new_device = {
@@ -490,12 +493,14 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
             "plant_id": plant_id_for_db
         }
 
+        # Insert the new device into the database
         result = await db["devices"].insert_one(new_device)
 
+        # Return the created device data
         return {
             "_id": str(device_object_id),
             "device_name": request_body.device_name,
-            "plant_id": request_body.plant_id
+            "plant_id": request_body.plant_id  # Return the original empty string in the response
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
