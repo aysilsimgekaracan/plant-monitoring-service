@@ -60,6 +60,18 @@ class CreateSensorOutput(BaseModel):
     soil_moisture: float
     light_level: float
     humidity: float
+    
+class Device(BaseModel):
+    plant_id: str | None
+    device_name: str
+
+class CreateDevice(BaseModel):
+    plant_id: str | None = None
+    device_name: str
+    
+class UpdateDevice(BaseModel):
+    plant_id: str | None = None
+    device_name: str
 
 ########################################################################
 # MARK: PLANT
@@ -364,5 +376,121 @@ async def create_sensor_output(sensor_output: CreateSensorOutput, current_user: 
 
         new_sensor_output = await db["sensor_outputs"].insert_one(new_sensor_output_object)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"_id": str(new_sensor_output.inserted_id)})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# GET endpoint to list all devices
+@router.get("/GetDevices/", response_description="List all devices", response_model=List[Device], tags=["Devices"])
+async def get_devices(current_user: dict = Security(get_current_user)):
+    roles = current_user.get("role", [])
+    
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
+    
+    try:
+        devices_cursor = db["devices"].find({})
+        devices = await devices_cursor.to_list(length=None)
+        
+        # Convert ObjectId to string for proper JSON response
+        for device in devices:
+            device["_id"] = str(device["_id"])
+        
+        return devices
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# POST endpoint to create a new device
+@router.post("/CreateDevice/", response_description="Create a new device", response_model=CreateDevice, tags=["Devices"])
+async def create_device(device: CreateDevice, current_user: dict = Security(get_current_user)):
+    roles = current_user.get("role", [])
+    
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
+    
+    try:
+        device_data = device.dict()
+        new_device = await db["devices"].insert_one(device_data)
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"_id": str(new_device.inserted_id)})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# GET endpoint to get a specific device by ID
+@router.get("/GetDevice", response_description="Get a device by ID", response_model=Device, tags=["Devices"])
+async def get_device(request_body: dict, current_user: dict = Security(get_current_user)):
+    roles = current_user.get("role", [])
+    
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
+    
+    try:
+        device_id = request_body.get("id")
+        
+        if not device_id:
+            return Response(content="Device ID not provided in the request body", status_code=status.HTTP_400_BAD_REQUEST)
+
+        device_object_id = ObjectId(device_id)
+        
+        device = await db["devices"].find_one({"_id": device_object_id})
+        
+        if not device:
+            return Response(content="Device not found", status_code=status.HTTP_404_NOT_FOUND)
+        
+        device["_id"] = str(device["_id"])
+        return device
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# PUT endpoint to update a device
+@router.put("/UpdateDevice/", response_description="Update a device by ID", response_model=Device, tags=["Devices"])
+async def update_device(request_body: dict, current_user: dict = Security(get_current_user)):
+    roles = current_user.get("role", [])
+    
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
+    
+    try:
+        device_id = request_body.get("id")
+        update_data = request_body.get("update_data", {})
+
+        if not device_id:
+            return Response(content="Device ID not provided", status_code=status.HTTP_400_BAD_REQUEST)
+
+        device_object_id = ObjectId(device_id)
+
+        result = await db["devices"].update_one({"_id": device_object_id}, {"$set": update_data})
+
+        if result.matched_count == 0:
+            return Response(content="Device not found", status_code=status.HTTP_404_NOT_FOUND)
+
+        return Response(content="Device updated successfully", status_code=status.HTTP_200_OK)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# DELETE endpoint to delete a device by ID
+@router.delete("/DeleteDevice/", response_description="Delete a device by ID", tags=["Devices"])
+async def delete_device(request_body: dict, current_user: dict = Security(get_current_user)):
+    roles = current_user.get("role", [])
+    
+    if "plant_monitoring" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
+    
+    try:
+        device_id = request_body.get("id")
+
+        if not device_id:
+            return Response(content="Device ID not provided", status_code=status.HTTP_400_BAD_REQUEST)
+
+        device_object_id = ObjectId(device_id)
+
+        result = await db["devices"].delete_one({"_id": device_object_id})
+
+        if result.deleted_count == 0:
+            return Response(content="Device not found", status_code=status.HTTP_404_NOT_FOUND)
+
+        return Response(content="Device deleted successfully", status_code=status.HTTP_204_NO_CONTENT)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
