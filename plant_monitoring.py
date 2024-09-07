@@ -409,7 +409,8 @@ async def get_devices(current_user: dict = Security(get_current_user)):
 
         # Convert ObjectId to string for _id field
         for device in devices:
-            device["_id"] = str(device["_id"])
+            if "_id" in device:
+                device["_id"] = str(device["_id"])  # Convert ObjectId to string
 
         return devices
     except Exception as e:
@@ -470,7 +471,8 @@ async def get_device(request_body: DeviceQuery, current_user: dict = Security(ge
         raise HTTPException(status_code=500, detail=str(e))
 
 # POST endpoint to create a new device
-@router.post("/CreateDevice/", response_description="Create a new device", response_model=CreateDeviceResponse, tags=["Devices"])
+
+@router.post("/CreateDevice/", response_description="Create a new device", tags=["Devices"])
 async def create_device(request_body: CreateDevice, current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
@@ -478,26 +480,22 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        # Convert empty string for plant_id to None for MongoDB
         plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
 
-        # Use the provided _id from the request body
         device_object_id = ObjectId(request_body._id)
 
         new_device = {
             "_id": device_object_id,
-            "device_name": request_body.device_name,  # Make sure the field matches the request
-            "plant_id": plant_id_for_db  # Store as None if it was an empty string
+            "device_name": request_body.device_name,
+            "plant_id": plant_id_for_db
         }
 
-        # Insert the new device into the database
         result = await db["devices"].insert_one(new_device)
 
-        # Return the created device data with the original empty string in the response
         return {
             "_id": str(device_object_id),
             "device_name": request_body.device_name,
-            "plant_id": request_body.plant_id  # Return the original empty string
+            "plant_id": request_body.plant_id
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -511,22 +509,20 @@ async def update_device(request_body: UpdateDevice, current_user: dict = Securit
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        device_id = request_body.device_id
+        device_object_id = ObjectId(request_body.device_id)
         update_data = {}
 
-        # Add only fields that are provided to the update_data dictionary
-        if request_body.plant_id is not None:
-            update_data["plant_id"] = request_body.plant_id  # Can be None or valid ID
-        
+        if request_body.plant_id == "":
+            update_data["plant_id"] = None
+        elif request_body.plant_id is not None:
+            update_data["plant_id"] = request_body.plant_id
+
         if request_body.device_name is not None:
             update_data["device_name"] = request_body.device_name
 
         if not update_data:
-            return HTTPException(status_code=400, detail="No fields provided to update")
-
-        device_object_id = ObjectId(device_id)
-
-        # Update the device with the provided data
+            return HTTPException(status_code=400, detail="No fields provided for update")
+        
         result = await db["devices"].update_one({"_id": device_object_id}, {"$set": update_data})
 
         if result.matched_count == 0:
