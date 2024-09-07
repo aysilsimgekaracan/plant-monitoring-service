@@ -502,7 +502,7 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
             "_id": str(device_object_id),
             "serial_number": request_body.serial_number,
             "device_name": request_body.device_name,
-            "plant_id": request_body.plant_id
+            "plant_id": None if plant_id_for_db is None else request_body.plant_id
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
