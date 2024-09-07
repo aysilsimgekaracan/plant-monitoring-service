@@ -70,8 +70,13 @@ class CreateDevice(BaseModel):
     device_name: str
     
 class UpdateDevice(BaseModel):
+    device_id: str
     plant_id: str | None = None
-    device_name: str
+    deviceName: str | None = None
+
+class DeviceQuery(BaseModel):
+    device_id: str | None = None
+    plant_id: str | None = None
 
 ########################################################################
 # MARK: PLANT
@@ -391,10 +396,9 @@ async def get_devices(current_user: dict = Security(get_current_user)):
         devices_cursor = db["devices"].find({})
         devices = await devices_cursor.to_list(length=None)
         
-        # Convert ObjectId to string for plant_id and _id
         for device in devices:
             device["_id"] = str(device["_id"])
-            if device["plant_id"]:
+            if device["plant_id"] is not None:
                 device["plant_id"] = str(device["plant_id"])
         
         return devices
@@ -419,55 +423,71 @@ async def create_device(device: CreateDevice, current_user: dict = Security(get_
 
 
 # GET endpoint to get a specific device by ID
-@router.get("/GetDevice", response_description="Get a device by ID", response_model=Device, tags=["Devices"])
-async def get_device(request_body: dict, current_user: dict = Security(get_current_user)):
+@router.post("/GetDevice", response_description="Get a device by device ID or plant ID", tags=["Devices"])
+async def get_device(request_body: DeviceQuery, current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
     if "plant_monitoring" not in roles and "admin" not in roles:
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        device_id = request_body.get("id")
-        
-        if not device_id:
-            return Response(content="Device ID not provided in the request body", status_code=status.HTTP_400_BAD_REQUEST)
+        device_id = request_body.device_id
+        plant_id = request_body.plant_id
 
-        device_object_id = ObjectId(device_id)
-        
-        device = await db["devices"].find_one({"_id": device_object_id})
-        
+        if not device_id and not plant_id:
+            return HTTPException(status_code=400, detail="You must provide either a device ID or plant ID")
+
+        query = {}
+        if device_id:
+            query["_id"] = ObjectId(device_id)
+        elif plant_id:
+            query["plant_id"] = ObjectId(plant_id)
+
+        device = await db["devices"].find_one(query)
+
         if not device:
-            return Response(content="Device not found", status_code=status.HTTP_404_NOT_FOUND)
-        
+            return HTTPException(status_code=404, detail="Device not found")
+
         device["_id"] = str(device["_id"])
+        if device.get("plant_id"):
+            device["plant_id"] = str(device["plant_id"])
+
         return device
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # PUT endpoint to update a device
-@router.put("/UpdateDevice/", response_description="Update a device by ID", response_model=Device, tags=["Devices"])
-async def update_device(request_body: dict, current_user: dict = Security(get_current_user)):
+@router.put("/UpdateDevice/", response_description="Update a device by ID", tags=["Devices"])
+async def update_device(request_body: UpdateDevice, current_user: dict = Security(get_current_user)):
     roles = current_user.get("role", [])
     
     if "plant_monitoring" not in roles and "admin" not in roles:
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        device_id = request_body.get("id")
-        update_data = request_body.get("update_data", {})
+        device_id = request_body.device_id
+        update_data = {}
 
-        if not device_id:
-            return Response(content="Device ID not provided", status_code=status.HTTP_400_BAD_REQUEST)
+        # Add only fields that are provided to the update_data dictionary
+        if request_body.plant_id is not None:
+            update_data["plant_id"] = request_body.plant_id  # Can be None or valid ID
+        
+        if request_body.deviceName is not None:
+            update_data["deviceName"] = request_body.deviceName
+
+        if not update_data:
+            return HTTPException(status_code=400, detail="No fields provided to update")
 
         device_object_id = ObjectId(device_id)
 
+        # Update the device with the provided data
         result = await db["devices"].update_one({"_id": device_object_id}, {"$set": update_data})
 
         if result.matched_count == 0:
-            return Response(content="Device not found", status_code=status.HTTP_404_NOT_FOUND)
+            return HTTPException(status_code=404, detail="Device not found")
 
-        return Response(content="Device updated successfully", status_code=status.HTTP_200_OK)
+        return {"message": "Device updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
