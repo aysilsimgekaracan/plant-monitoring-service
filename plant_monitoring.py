@@ -67,12 +67,12 @@ class Device(BaseModel):
 
 class CreateDevice(BaseModel):
     _id: str
-    deviceName: str
+    device_name: str
     plant_id: str
     
 class CreateDeviceResponse(BaseModel):
     _id: str
-    deviceName: str
+    device_name: str
     plant_id: str | None = None
     
 class UpdateDevice(BaseModel):
