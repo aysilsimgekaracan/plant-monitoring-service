@@ -67,6 +67,7 @@ class Device(BaseModel):
 
 class CreateDevice(BaseModel):
     _id: str
+    serial_number: str
     device_name: str
     plant_id: str
     
@@ -403,16 +404,16 @@ async def get_devices(current_user: dict = Security(get_current_user)):
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        # Retrieve all devices from the collection
         devices_cursor = db["devices"].find({})
         devices = await devices_cursor.to_list(length=None)
 
-        # Convert ObjectId to string for _id and plant_id fields
         for device in devices:
             if "_id" in device:
-                device["_id"] = str(device["_id"])  # Convert ObjectId to string
+                device["_id"] = str(device["_id"])
             if "plant_id" in device and device["plant_id"]:
-                device["plant_id"] = str(device["plant_id"])  # Convert plant_id ObjectId to string if it exists
+                device["plant_id"] = str(device["plant_id"])
+            if "serial_number" not in device:
+                device["serial_number"] = None
 
         return devices
     except Exception as e:
@@ -426,13 +427,14 @@ async def available_devices(current_user: dict = Security(get_current_user)):
         raise HTTPException(status_code=401, detail="You do not have access to this endpoint.")
     
     try:
-        # Retrieve devices with plant_id as null (None in Python)
+
         available_devices_cursor = db["devices"].find({"plant_id": None})
         available_devices = await available_devices_cursor.to_list(length=None)
-
-        # Convert ObjectId to string for _id field
+        
         for device in available_devices:
             device["_id"] = str(device["_id"])
+            if "serial_number" not in device:
+                device["serial_number"] = None 
 
         return available_devices
     except Exception as e:
@@ -451,7 +453,7 @@ async def get_device(request_body: DeviceQuery, current_user: dict = Security(ge
         plant_id = request_body.plant_id
 
         if not device_id and not plant_id:
-            return HTTPException(status_code=400, detail="You must provide either a device ID or plant ID")
+            raise HTTPException(status_code=400, detail="You must provide either a device ID or plant ID")
 
         query = {}
         if device_id:
@@ -462,11 +464,13 @@ async def get_device(request_body: DeviceQuery, current_user: dict = Security(ge
         device = await db["devices"].find_one(query)
 
         if not device:
-            return HTTPException(status_code=404, detail="Device not found")
+            raise HTTPException(status_code=404, detail="Device not found")
 
         device["_id"] = str(device["_id"])
         if device.get("plant_id"):
             device["plant_id"] = str(device["plant_id"])
+        if "serial_number" not in device:
+            device["serial_number"] = None
 
         return device
     except Exception as e:
@@ -482,14 +486,12 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
     
     try:
         plant_id_for_db = request_body.plant_id if request_body.plant_id != "" else None
-        
-        try:
-            device_object_id = ObjectId(request_body._id)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="Invalid ObjectId format")
+
+        device_object_id = ObjectId()
 
         new_device = {
             "_id": device_object_id,
+            "serial_number": request_body.serial_number,
             "device_name": request_body.device_name,
             "plant_id": plant_id_for_db
         }
@@ -498,6 +500,7 @@ async def create_device(request_body: CreateDevice, current_user: dict = Securit
 
         return {
             "_id": str(device_object_id),
+            "serial_number": request_body.serial_number,
             "device_name": request_body.device_name,
             "plant_id": request_body.plant_id
         }
