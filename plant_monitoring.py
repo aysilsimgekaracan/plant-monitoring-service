@@ -42,6 +42,7 @@ class CreatePlant(BaseModel):
     type: str
     location: str
     description: str
+    imageUrl: str = ""
 
 
 class SensorOutput(BaseModel):
@@ -262,6 +263,8 @@ async def create_plant(plant: CreatePlant, current_user: dict = Security(get_cur
     
     try:
         plant = jsonable_encoder(plant)
+        if "imageUrl" not in plant:
+            plant["imageUrl"] = ""
         new_plant = await db["plants"].insert_one(plant)
         return JSONResponse(status_code=status.HTTP_201_CREATED, content={"_id": str(new_plant.inserted_id)})
     except Exception as e:
